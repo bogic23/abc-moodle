@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/LoginView.vue'
 import { useAuthStore } from '../stores/auth'
+import { useCourseStore } from '../stores/course'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -11,6 +12,18 @@ const router = createRouter({
       name: 'teacher-dashboard',
       meta: { requiresAuth: true, role: 'teacher' },
       component: () => import('../views/TeacherDashboard.vue'),
+    },
+    {
+      path: '/teacher/course/new',
+      name: 'course-create',
+      meta: { requiresAuth: true, role: 'teacher' },
+      component: () => import('../views/CourseFormView.vue'),
+    },
+    {
+      path: '/teacher/course',
+      name: 'course-edit',
+      meta: { requiresAuth: true, role: 'teacher' },
+      component: () => import('../views/CourseFormView.vue'),
     },
     {
       path: '/teacher/lesson/new',
@@ -67,6 +80,10 @@ router.beforeEach(async to => {
 
   if (to.meta.role && auth.role !== to.meta.role) {
     return { name: auth.role === 'teacher' ? 'teacher-dashboard' : 'student-dashboard' }
+  }
+
+  if (to.meta.requiresAuth && auth.currentUser) {
+    await useCourseStore().initialize(auth.currentUser.uid, auth.role)
   }
 
   if (to.name === 'login' && auth.currentUser) {

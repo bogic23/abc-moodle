@@ -6,8 +6,16 @@ import { useCourseStore } from '../stores/course'
 const route = useRoute()
 const router = useRouter()
 const store = useCourseStore()
+const exerciseResponses = ref({})
 
-const lesson = computed(() => store.lessons.find(l => l.id === Number(route.params.id)))
+const lesson = computed(() => store.lessons.find(l => String(l.id) === String(route.params.id)))
+const section = computed(() => store.sections.find(item => String(item.id) === String(lesson.value?.sectionId)))
+const orderedLessons = computed(() => store.sections.flatMap(item =>
+  item.lessonIds.map(id => store.lessons.find(candidate => String(candidate.id) === String(id))).filter(Boolean),
+))
+const lessonIndex = computed(() => orderedLessons.value.findIndex(item => String(item.id) === String(lesson.value?.id)))
+const previousLesson = computed(() => orderedLessons.value[lessonIndex.value - 1] || null)
+const nextLesson = computed(() => orderedLessons.value[lessonIndex.value + 1] || null)
 
 onMounted(() => {
   if (!lesson.value) router.push('/student')
@@ -15,7 +23,8 @@ onMounted(() => {
 
 function complete() {
   store.markLessonComplete(lesson.value.id)
-  router.push('/student')
+  if (nextLesson.value) router.push(`/student/lesson/${nextLesson.value.id}`)
+  else router.push('/student')
 }
 </script>
 
@@ -32,14 +41,44 @@ function complete() {
         <span v-if="lesson.completed" class="rounded-lg bg-emerald-100 px-3 py-1.5 text-sm font-medium text-emerald-700">Completed</span>
       </div>
 
+      <p v-if="section" class="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-brand-700">{{ section.title }}</p>
       <h1 class="text-2xl font-bold tracking-tight text-slate-900">{{ lesson.title }}</h1>
       <p class="mt-2 text-slate-500">{{ lesson.description }}</p>
+      <p v-if="section?.introduction" class="mt-4 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">{{ section.introduction }}</p>
 
       <hr class="my-6 border-slate-200" />
 
+      <section v-if="lesson.objectives?.length" class="mb-7">
+        <h2 class="mb-3 text-lg font-semibold text-slate-900">Learning objectives</h2>
+        <ul class="space-y-2">
+          <li v-for="objective in lesson.objectives" :key="objective" class="flex gap-2 text-sm text-slate-700">
+            <span class="text-emerald-600">✓</span>{{ objective }}
+          </li>
+        </ul>
+      </section>
+
       <div class="prose prose-slate max-w-none">
-        <p class="leading-relaxed text-slate-700">{{ lesson.content }}</p>
+        <p v-for="(paragraph, index) in lesson.content.split('\n').filter(Boolean)" :key="index" class="mb-4 whitespace-pre-line leading-relaxed text-slate-700">{{ paragraph }}</p>
       </div>
+
+      <img v-if="lesson.imageUrl" :src="lesson.imageUrl" :alt="`${lesson.title} illustration`" class="mt-6 max-h-[28rem] w-full rounded-xl border border-slate-200 object-contain" />
+      <audio v-if="lesson.audioUrl" controls :src="lesson.audioUrl" class="mt-6 w-full">Your browser does not support audio playback.</audio>
+      <video v-if="lesson.videoUrl" controls :src="lesson.videoUrl" class="mt-6 max-h-[28rem] w-full rounded-xl bg-slate-950">Your browser does not support video playback.</video>
+
+      <section v-if="lesson.examples" class="mt-8 rounded-xl border border-brand-100 bg-brand-50/60 p-5">
+        <h2 class="mb-2 font-semibold text-slate-900">Examples and demonstrations</h2>
+        <p class="whitespace-pre-line text-sm leading-6 text-slate-700">{{ lesson.examples }}</p>
+      </section>
+
+      <section v-if="lesson.exercises?.length" class="mt-8">
+        <h2 class="mb-3 text-lg font-semibold text-slate-900">Practice activities</h2>
+        <ol class="space-y-4">
+          <li v-for="(exercise, index) in lesson.exercises" :key="exercise" class="rounded-xl border border-slate-200 p-4">
+            <label :for="`exercise-${index}`" class="block text-sm font-medium leading-6 text-slate-800">{{ index + 1 }}. {{ exercise }}</label>
+            <textarea :id="`exercise-${index}`" v-model="exerciseResponses[index]" rows="2" class="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" placeholder="Write your response here"></textarea>
+          </li>
+        </ol>
+      </section>
 
       <div v-if="!lesson.completed" class="mt-8">
         <button
@@ -49,6 +88,19 @@ function complete() {
           Mark as Complete
         </button>
       </div>
+
+      <nav class="mt-8 flex flex-col justify-between gap-3 border-t border-slate-200 pt-5 sm:flex-row">
+        <RouterLink v-if="previousLesson" :to="`/student/lesson/${previousLesson.id}`" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50">
+          ← {{ previousLesson.title }}
+        </RouterLink>
+        <span v-else></span>
+        <RouterLink v-if="nextLesson" :to="`/student/lesson/${nextLesson.id}`" class="rounded-xl bg-brand-600 px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-brand-700">
+          Next: {{ nextLesson.title }} →
+        </RouterLink>
+        <RouterLink v-else to="/student" class="rounded-xl bg-brand-600 px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-brand-700">
+          Back to course →
+        </RouterLink>
+      </nav>
     </div>
   </div>
 </template>
