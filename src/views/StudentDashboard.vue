@@ -1,9 +1,18 @@
 <script setup>
+import { computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useCourseStore } from '../stores/course'
 import { useAuthStore } from '../stores/auth'
 
 const store = useCourseStore()
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
+const selectedCourse = computed(() => store.courses.find(course => String(course.id) === String(route.query.course)))
+
+watch(selectedCourse, course => {
+  if (course) store.setActiveCourse(course.id)
+}, { immediate: true })
 
 function lessonsForSection(sectionId) {
   return store.sections.find(section => section.id === sectionId)?.lessonIds
@@ -28,7 +37,13 @@ function sectionComplete(section) {
 }
 
 function selectCourse(courseId) {
-  store.setActiveCourse(courseId)
+  if (store.setActiveCourse(courseId)) {
+    router.push({ name: 'student-dashboard', query: { course: String(courseId) } })
+  }
+}
+
+function showCourses() {
+  router.push({ name: 'student-dashboard' })
 }
 </script>
 
@@ -37,18 +52,50 @@ function selectCourse(courseId) {
     <p v-if="!store.hasCourses" class="mb-6 rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
       No courses are available yet. Check back after an instructor creates a course.
     </p>
-    <section v-if="store.courses.length > 1" class="mb-6">
-      <h2 class="mb-3 text-sm font-semibold text-slate-700">Your courses</h2>
-      <div class="flex gap-3 overflow-x-auto pb-2">
-        <button v-for="course in store.courses" :key="course.id" type="button" @click="selectCourse(course.id)" class="min-w-56 rounded-xl border bg-white p-4 text-left transition-colors" :class="course.id === store.activeCourseId ? 'border-brand-300 bg-brand-50 ring-2 ring-brand-100' : 'border-slate-200 hover:border-brand-200'">
-          <span class="text-xs font-bold uppercase tracking-wide" :class="course.id === store.activeCourseId ? 'text-brand-700' : 'text-slate-400'">{{ course.id === store.activeCourseId ? 'Selected course' : 'Switch to course' }}</span>
-          <span class="mt-1 block font-semibold text-slate-900">{{ course.title }}</span>
-          <span class="mt-1 block text-xs text-slate-500">{{ course.progress }}% complete · {{ course.lessonCount }} lessons</span>
+    <section v-if="store.hasCourses && !selectedCourse" class="mb-8">
+      <div class="mb-5">
+        <p class="text-xs font-bold uppercase tracking-[0.16em] text-brand-700">Student dashboard</p>
+        <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Choose a course to continue</h1>
+        <p class="mt-2 text-sm text-slate-500">Select a course to view its lessons and learning activities.</p>
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <button
+          v-for="course in store.courses"
+          :key="course.id"
+          type="button"
+          @click="selectCourse(course.id)"
+          class="surface-card interactive-card group flex h-full flex-col overflow-hidden text-left"
+        >
+          <img v-if="course.thumbnail" :src="course.thumbnail" :alt="`${course.title} thumbnail`" class="h-40 w-full object-cover" />
+          <div class="flex flex-1 flex-col p-5">
+            <span class="text-xs font-bold uppercase tracking-wide text-brand-700">{{ course.difficulty }} course</span>
+            <h2 class="mt-2 text-lg font-semibold text-slate-900 transition-colors group-hover:text-brand-700">{{ course.title }}</h2>
+            <p class="mt-2 line-clamp-3 flex-1 text-sm leading-6 text-slate-500">{{ course.description }}</p>
+            <div class="mt-5">
+              <div class="mb-1.5 flex justify-between text-xs font-medium text-slate-500">
+                <span>{{ course.lessonCount }} lessons</span>
+                <span>{{ course.progress }}% complete</span>
+              </div>
+              <div class="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div class="h-full rounded-full bg-emerald-500 transition-all" :style="{ width: `${course.progress}%` }"></div>
+              </div>
+            </div>
+            <span class="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-brand-700">
+              Open course <span class="transition-transform group-hover:translate-x-1">→</span>
+            </span>
+          </div>
         </button>
       </div>
     </section>
 
-    <section v-if="store.hasCourses" class="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-brand-900 px-6 py-8 text-white shadow-xl shadow-slate-900/10 sm:px-9 sm:py-10">
+    <div v-if="selectedCourse" class="mb-5">
+      <button type="button" @click="showCourses" class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand-600">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+        Choose another course
+      </button>
+    </div>
+
+    <section v-if="selectedCourse" class="relative mb-8 overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-brand-900 px-6 py-8 text-white shadow-xl shadow-slate-900/10 sm:px-9 sm:py-10">
       <div class="pointer-events-none absolute -right-12 -top-24 h-72 w-72 rounded-full border border-white/10 bg-white/5"></div>
       <div class="pointer-events-none absolute -bottom-32 right-28 h-64 w-64 rounded-full border border-white/10"></div>
       <div class="relative flex flex-col gap-6 sm:flex-row sm:items-center">
@@ -75,7 +122,7 @@ function selectCourse(courseId) {
       </div>
     </section>
 
-    <section v-if="store.hasCourses" class="surface-card mb-8 grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
+    <section v-if="selectedCourse" class="surface-card mb-8 grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
       <div>
         <h2 class="font-semibold text-slate-900">Learning objectives</h2>
         <ul class="mt-3 space-y-2 text-sm text-slate-600">
@@ -89,7 +136,7 @@ function selectCourse(courseId) {
       </div>
     </section>
 
-    <div v-if="store.hasCourses" class="mb-8 grid gap-4 sm:grid-cols-3">
+    <div v-if="selectedCourse" class="mb-8 grid gap-4 sm:grid-cols-3">
       <div class="surface-card dashboard-stat interactive-card">
         <div class="relative z-10 flex items-start justify-between gap-3">
           <div>
@@ -125,7 +172,7 @@ function selectCourse(courseId) {
       </div>
     </div>
 
-    <div v-if="store.hasCourses" class="mb-8">
+    <div v-if="selectedCourse" class="mb-8">
       <div class="mb-4 flex items-end justify-between gap-3">
         <div v-if="store.hasCourses">
           <p class="text-xs font-bold uppercase tracking-[0.16em] text-brand-700">Course curriculum</p>
@@ -157,7 +204,7 @@ function selectCourse(courseId) {
             </span>
           </div>
           <div class="grid gap-3 sm:grid-cols-2">
-            <RouterLink v-for="lesson in lessonsForSection(section.id)" :key="lesson.id" :to="`/student/lesson/${lesson.id}`" class="group rounded-xl border border-slate-200 p-4 transition-colors hover:border-brand-200 hover:bg-brand-50/40">
+            <RouterLink v-for="lesson in lessonsForSection(section.id)" :key="lesson.id" :to="{ name: 'lesson-learn', params: { id: lesson.id }, query: { course: store.activeCourseId } }" class="group rounded-xl border border-slate-200 p-4 transition-colors hover:border-brand-200 hover:bg-brand-50/40">
               <div class="mb-2 flex items-center justify-between gap-2">
                 <span class="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">{{ lesson.duration }}</span>
                 <span v-if="lesson.completed" class="text-xs font-semibold text-emerald-700">Completed</span>
@@ -172,7 +219,7 @@ function selectCourse(courseId) {
       </div>
     </div>
 
-    <div>
+    <div v-if="selectedCourse">
       <div class="mb-4 flex items-end justify-between gap-3">
         <div>
           <p class="text-xs font-bold uppercase tracking-[0.16em] text-violet-700">Check your progress</p>
@@ -184,7 +231,7 @@ function selectCourse(courseId) {
         <RouterLink
           v-for="test in store.tests"
           :key="test.id"
-          :to="`/student/test/${test.id}`"
+          :to="{ name: 'test-take', params: { id: test.id }, query: { course: store.activeCourseId } }"
           class="surface-card interactive-card group flex min-h-44 flex-col p-5"
         >
           <div class="mb-4 flex items-center justify-between gap-2">

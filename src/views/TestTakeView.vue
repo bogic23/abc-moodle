@@ -64,7 +64,7 @@ function startAttempt() {
 
 onMounted(() => {
   if (!test.value) {
-    router.push('/student')
+    router.push({ name: 'student-dashboard', query: route.query })
     return
   }
   if (test.value.completed) submitted.value = true
@@ -117,7 +117,7 @@ function correctAnswerLabel(question) {
 
 <template>
   <div v-if="test" class="mx-auto max-w-3xl">
-    <RouterLink to="/student" class="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand-600">
+    <RouterLink :to="{ name: 'student-dashboard', query: route.query }" class="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand-600">
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
       Back to course
     </RouterLink>

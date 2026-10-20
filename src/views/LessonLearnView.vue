@@ -18,19 +18,19 @@ const previousLesson = computed(() => orderedLessons.value[lessonIndex.value - 1
 const nextLesson = computed(() => orderedLessons.value[lessonIndex.value + 1] || null)
 
 onMounted(() => {
-  if (!lesson.value) router.push('/student')
+  if (!lesson.value) router.push({ name: 'student-dashboard', query: route.query })
 })
 
 function complete() {
   store.markLessonComplete(lesson.value.id)
-  if (nextLesson.value) router.push(`/student/lesson/${nextLesson.value.id}`)
-  else router.push('/student')
+  if (nextLesson.value) router.push({ name: 'lesson-learn', params: { id: nextLesson.value.id }, query: route.query })
+  else router.push({ name: 'student-dashboard', query: route.query })
 }
 </script>
 
 <template>
   <div v-if="lesson" class="mx-auto max-w-3xl">
-    <RouterLink to="/student" class="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand-600">
+    <RouterLink :to="{ name: 'student-dashboard', query: route.query }" class="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-brand-600">
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
       Back to Dashboard
     </RouterLink>
@@ -90,14 +90,14 @@ function complete() {
       </div>
 
       <nav class="mt-8 flex flex-col justify-between gap-3 border-t border-slate-200 pt-5 sm:flex-row">
-        <RouterLink v-if="previousLesson" :to="`/student/lesson/${previousLesson.id}`" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50">
+        <RouterLink v-if="previousLesson" :to="{ name: 'lesson-learn', params: { id: previousLesson.id }, query: route.query }" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50">
           ← {{ previousLesson.title }}
         </RouterLink>
         <span v-else></span>
-        <RouterLink v-if="nextLesson" :to="`/student/lesson/${nextLesson.id}`" class="rounded-xl bg-brand-600 px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-brand-700">
+        <RouterLink v-if="nextLesson" :to="{ name: 'lesson-learn', params: { id: nextLesson.id }, query: route.query }" class="rounded-xl bg-brand-600 px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-brand-700">
           Next: {{ nextLesson.title }} →
         </RouterLink>
-        <RouterLink v-else to="/student" class="rounded-xl bg-brand-600 px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-brand-700">
+        <RouterLink v-else :to="{ name: 'student-dashboard', query: route.query }" class="rounded-xl bg-brand-600 px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-brand-700">
           Back to course →
         </RouterLink>
       </nav>
