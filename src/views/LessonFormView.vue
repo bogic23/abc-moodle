@@ -33,6 +33,8 @@ onMounted(() => {
       objectivesText.value = (lesson.objectives || []).join('\n')
       exercisesText.value = (lesson.exercises || []).join('\n')
     }
+  } else if (route.query.section && store.sections.some(section => String(section.id) === String(route.query.section))) {
+    form.value.sectionId = String(route.query.section)
   }
 })
 
@@ -54,7 +56,7 @@ async function save() {
     store.addLesson(payload)
   }
   if (!await store.flushPersistence()) return
-  router.push('/teacher')
+  router.push({ name: 'teacher-dashboard', query: { section: form.value.sectionId } })
 }
 </script>
 
@@ -162,7 +164,7 @@ async function save() {
           {{ isEdit ? 'Update Lesson' : 'Create Lesson' }}
         </button>
         <RouterLink
-          to="/teacher"
+          :to="{ name: 'teacher-dashboard', query: { section: form.sectionId } }"
           class="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
         >
           Cancel

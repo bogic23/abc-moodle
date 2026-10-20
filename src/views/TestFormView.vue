@@ -32,7 +32,12 @@ const form = ref({
 const formError = ref('')
 
 onMounted(() => {
-  if (!isEdit.value) return
+  if (!isEdit.value) {
+    if (route.query.section && store.sections.some(section => String(section.id) === String(route.query.section))) {
+      form.value.sectionId = String(route.query.section)
+    }
+    return
+  }
   const test = store.tests.find(item => String(item.id) === String(route.params.id))
   if (!test) return
   const copy = JSON.parse(JSON.stringify(test))
@@ -85,7 +90,7 @@ async function save() {
   if (isEdit.value) store.updateTest(route.params.id, payload)
   else store.addTest(payload)
   if (!await store.flushPersistence()) return
-  router.push('/teacher')
+  router.push({ name: 'teacher-dashboard', query: { section: form.value.sectionId || undefined } })
 }
 </script>
 
@@ -196,7 +201,7 @@ async function save() {
 
       <div class="flex gap-3">
         <button type="submit" class="rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700">{{ isEdit ? 'Update assessment' : 'Create assessment' }}</button>
-        <RouterLink to="/teacher" class="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</RouterLink>
+        <RouterLink :to="{ name: 'teacher-dashboard', query: { section: form.sectionId || undefined } }" class="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</RouterLink>
       </div>
     </form>
   </div>
