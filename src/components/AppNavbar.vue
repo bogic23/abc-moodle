@@ -1,13 +1,20 @@
 <script setup>
+import { ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
 const router = useRouter()
+const logoutError = ref('')
 
-function switchRole(role) {
-  auth.switchRole(role)
-  router.push(role === 'teacher' ? '/teacher' : '/student')
+async function logout() {
+  logoutError.value = ''
+  try {
+    await auth.logout()
+    await router.replace({ name: 'login' })
+  } catch (error) {
+    logoutError.value = error.message
+  }
 }
 </script>
 
@@ -25,42 +32,25 @@ function switchRole(role) {
         <span class="truncate text-base font-bold tracking-tight text-slate-900 sm:text-lg">ABC Scores</span>
       </RouterLink>
 
-      <div class="flex shrink-0 items-center gap-0.5 rounded-xl border border-slate-200/80 bg-slate-100/80 p-1 sm:gap-1">
-        <button
-          @click="switchRole('teacher')"
-          :aria-pressed="auth.role === 'teacher'"
-          :class="[
-            'rounded-lg px-2.5 py-2 text-xs font-semibold transition-all duration-200 sm:px-4 sm:text-sm',
-            auth.role === 'teacher'
-              ? 'bg-white text-brand-700 shadow-sm ring-1 ring-slate-200/70'
-              : 'text-slate-500 hover:text-slate-800'
-          ]"
-        >
-          Teacher
-        </button>
-        <button
-          @click="switchRole('student')"
-          :aria-pressed="auth.role === 'student'"
-          :class="[
-            'rounded-lg px-2.5 py-2 text-xs font-semibold transition-all duration-200 sm:px-4 sm:text-sm',
-            auth.role === 'student'
-              ? 'bg-white text-brand-700 shadow-sm ring-1 ring-slate-200/70'
-              : 'text-slate-500 hover:text-slate-800'
-          ]"
-        >
-          Student
-        </button>
-      </div>
-
       <div class="flex min-w-0 items-center gap-2.5 sm:gap-3">
         <div class="hidden min-w-0 text-right sm:block">
           <p class="text-sm font-medium text-slate-900">{{ auth.userName }}</p>
           <p class="text-xs capitalize text-slate-500">{{ auth.role }} workspace</p>
         </div>
         <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-100 to-brand-200 text-sm font-bold text-brand-700 ring-2 ring-white shadow-sm sm:h-10 sm:w-10">
-          {{ auth.userName.charAt(0) }}
+          {{ auth.userName.charAt(0).toUpperCase() }}
         </div>
+        <button
+          type="button"
+          class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 sm:px-3.5 sm:text-sm"
+          @click="logout"
+        >
+          Sign out
+        </button>
       </div>
     </div>
+    <p v-if="logoutError" role="alert" class="mx-auto max-w-7xl px-4 pb-2 text-right text-xs text-red-700 sm:px-6 lg:px-8">
+      {{ logoutError }}
+    </p>
   </nav>
 </template>
