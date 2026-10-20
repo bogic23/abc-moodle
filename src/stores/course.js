@@ -87,6 +87,7 @@ export const useCourseStore = defineStore('course', () => {
   const activeCourseRecord = computed(() => courses.value.find(item => matchesId(item.id, activeCourseId.value)))
   const currentUserId = ref(null)
   const currentRole = ref(null)
+  const currentTeacherApproval = ref('pending')
   const persistenceReady = ref(false)
   const persistenceLoading = ref(false)
   const persistenceStatus = ref('idle')
@@ -120,7 +121,8 @@ export const useCourseStore = defineStore('course', () => {
     get: () => activeCourseRecord.value?.tests || [],
     set: value => { activeCourseRecord.value.tests = value },
   })
-  const canManageActiveCourse = computed(() => !!activeCourseRecord.value && activeCourseRecord.value.ownerUid === currentUserId.value)
+  const isTeacherApproved = computed(() => currentRole.value === 'teacher' && currentTeacherApproval.value === 'approved')
+  const canManageActiveCourse = computed(() => isTeacherApproved.value && !!activeCourseRecord.value && activeCourseRecord.value.ownerUid === currentUserId.value)
   const hasCourses = computed(() => courses.value.length > 0)
 
   const lessonCount = computed(() => lessons.value.length)
@@ -169,7 +171,7 @@ export const useCourseStore = defineStore('course', () => {
 
   function addCourse(details, sectionData = []) {
     if (!currentUserId.value) throw new Error('Sign in before creating a course.')
-    if (currentRole.value !== 'teacher') throw new Error('Only teacher accounts can create courses.')
+    if (!isTeacherApproved.value) throw new Error('An admin must approve your teacher account before you can create courses.')
     const id = createId()
     const newSections = sectionData.map(section => ({
       id: createId(),
@@ -505,10 +507,10 @@ export const useCourseStore = defineStore('course', () => {
 
   watch(courses, scheduleSave, { deep: true })
 
-  async function initialize(userId, role) {
+  async function initialize(userId, role, teacherApproval = 'pending') {
     if (initializedUserId === userId && persistenceReady.value) return
     if (initializePromise) return initializePromise
-    initializePromise = loadCourses(userId, role)
+    initializePromise = loadCourses(userId, role, teacherApproval)
     try {
       await initializePromise
     } finally {
@@ -516,12 +518,13 @@ export const useCourseStore = defineStore('course', () => {
     }
   }
 
-  async function loadCourses(userId, role) {
+  async function loadCourses(userId, role, teacherApproval) {
     persistenceLoading.value = true
     persistenceError.value = ''
     persistenceReady.value = false
     currentUserId.value = userId
     currentRole.value = role
+    currentTeacherApproval.value = teacherApproval
 
     try {
       const { db, collection, doc, getDoc, getDocs, setDoc, serverTimestamp } = await getPersistenceModules()
@@ -532,7 +535,7 @@ export const useCourseStore = defineStore('course', () => {
         return mergeProgress(record, progressSnapshot.exists() ? progressSnapshot.data() : {})
       }))
 
-      if (!records.length && role === 'teacher') {
+      if (!records.length && role === 'teacher' && teacherApproval === 'approved') {
         const seed = courses.value[0]
         const seededRecord = normalizeCourse('algebra-foundations', {
           ownerUid: userId,
@@ -567,7 +570,7 @@ export const useCourseStore = defineStore('course', () => {
   }
 
   return {
-    courses: courseList, activeCourseId, currentUserId, canManageActiveCourse, hasCourses, persistenceLoading, persistenceReady, persistenceStatus, persistenceError,
+    courses: courseList, activeCourseId, currentUserId, isTeacherApproved, canManageActiveCourse, hasCourses, persistenceLoading, persistenceReady, persistenceStatus, persistenceError,
     course, sections, lessons, tests, lessonCount, testCount, completedLessons, courseProgress, courseCompleted, averageScore, certificateEligible,
     initialize, flushPersistence, setActiveCourse, addCourse, updateCourse, addSection, updateSection, deleteSection,
     addLesson, updateLesson, moveLesson, deleteLesson,

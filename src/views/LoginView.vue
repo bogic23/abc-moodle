@@ -16,6 +16,12 @@ const notice = ref('')
 
 const isRegistering = () => mode.value === 'register'
 
+function destinationForRole(userRole) {
+  if (userRole === 'admin') return { name: 'admin-users' }
+  if (userRole === 'teacher') return { name: 'teacher-dashboard' }
+  return { name: 'student-dashboard' }
+}
+
 function switchMode(nextMode) {
   mode.value = nextMode
   errorMessage.value = ''
@@ -39,7 +45,7 @@ async function submit() {
       await auth.login({ email: email.value.trim(), password: password.value })
     }
 
-    await router.replace({ name: auth.role === 'teacher' ? 'teacher-dashboard' : 'student-dashboard' })
+    await router.replace(destinationForRole(auth.role))
   } catch (error) {
     errorMessage.value = error.message
   } finally {
@@ -54,7 +60,7 @@ async function signInWithGoogle() {
 
   try {
     await auth.loginWithGoogle(role.value)
-    await router.replace({ name: auth.role === 'teacher' ? 'teacher-dashboard' : 'student-dashboard' })
+    await router.replace(destinationForRole(auth.role))
   } catch (error) {
     errorMessage.value = error.message
   } finally {

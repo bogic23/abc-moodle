@@ -1,11 +1,12 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
 const router = useRouter()
 const logoutError = ref('')
+const homePath = computed(() => auth.role === 'admin' ? '/admin/users' : auth.role === 'teacher' ? '/teacher' : '/student')
 
 async function logout() {
   logoutError.value = ''
@@ -22,7 +23,7 @@ async function logout() {
   <nav class="sticky top-0 z-50 border-b border-white/70 bg-white/75 backdrop-blur-xl">
     <div class="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
       <RouterLink
-        :to="auth.role === 'teacher' ? '/teacher' : '/student'"
+        :to="homePath"
         class="group flex min-w-0 items-center gap-3 rounded-lg"
         aria-label="ABC Scores home"
       >
@@ -33,6 +34,9 @@ async function logout() {
       </RouterLink>
 
       <div class="flex min-w-0 items-center gap-2.5 sm:gap-3">
+        <RouterLink v-if="auth.role === 'admin'" to="/admin/users" class="rounded-lg px-3 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-50">
+          User management
+        </RouterLink>
         <div class="hidden min-w-0 text-right sm:block">
           <p class="text-sm font-medium text-slate-900">{{ auth.userName }}</p>
           <p class="text-xs capitalize text-slate-500">{{ auth.role }} workspace</p>

@@ -9,10 +9,19 @@ export const useAuthStore = defineStore('auth', () => {
   let initializePromise
   let profileWriteInProgress = false
 
-  const validRoles = ['teacher', 'student']
+  const validRoles = ['teacher', 'student', 'admin']
+  const selfAssignableRoles = ['teacher', 'student']
   const role = computed(() => profile.value?.role || null)
+  const teacherApproval = computed(() => profile.value?.teacherApproval || (role.value === 'teacher' ? 'pending' : 'not-required'))
   const userName = computed(() => profile.value?.displayName || currentUser.value?.email || '')
   let firebaseModulesPromise
+
+  function getTeacherApproval(userProfile) {
+    if (userProfile.teacherApproval) return userProfile.teacherApproval
+    if (userProfile.role === 'teacher') return 'pending'
+    if (userProfile.role === 'student') return 'not-required'
+    return undefined
+  }
 
   function getFirebaseModules() {
     if (!firebaseModulesPromise) {
@@ -69,6 +78,7 @@ export const useAuthStore = defineStore('auth', () => {
       displayName: data.displayName,
       email: data.email,
       role: data.role,
+      teacherApproval: getTeacherApproval(data),
     }
   }
 
@@ -125,7 +135,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function register({ displayName, email, password, role }) {
     authError.value = ''
-    if (!validRoles.includes(role)) throw new Error('Choose a valid account role.')
+    if (!selfAssignableRoles.includes(role)) throw new Error('Choose a valid account role.')
 
     profileWriteInProgress = true
     let userCredential
@@ -139,6 +149,7 @@ export const useAuthStore = defineStore('auth', () => {
         displayName,
         email: userCredential.user.email,
         role,
+        teacherApproval: role === 'teacher' ? 'pending' : 'not-required',
         createdAt: firebaseModules.serverTimestamp(),
         updatedAt: firebaseModules.serverTimestamp(),
         lastLoginAt: firebaseModules.serverTimestamp(),
@@ -150,6 +161,7 @@ export const useAuthStore = defineStore('auth', () => {
         displayName: userProfile.displayName,
         email: userProfile.email,
         role: userProfile.role,
+        teacherApproval: userProfile.teacherApproval,
       }
     } catch (error) {
       if (userCredential) {
@@ -182,6 +194,7 @@ export const useAuthStore = defineStore('auth', () => {
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         lastLoginAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        ...(userProfile.teacherApproval ? { teacherApproval: userProfile.teacherApproval } : {}),
       }, { merge: true })
       currentUser.value = userCredential.user
       profile.value = userProfile
@@ -194,7 +207,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function loginWithGoogle(selectedRole) {
     authError.value = ''
-    if (!validRoles.includes(selectedRole)) throw new Error('Choose a valid account role.')
+    if (!selfAssignableRoles.includes(selectedRole)) throw new Error('Choose a valid account role.')
 
     profileWriteInProgress = true
     let firebaseModules
@@ -213,9 +226,11 @@ export const useAuthStore = defineStore('auth', () => {
         if (!validRoles.includes(userProfile.role) || !userProfile.displayName) {
           throw new Error('This account profile is incomplete or invalid. Please contact your administrator.')
         }
+        const approval = getTeacherApproval(userProfile)
         await firebaseModules.setDoc(userRef, {
           lastLoginAt: firebaseModules.serverTimestamp(),
           updatedAt: firebaseModules.serverTimestamp(),
+          ...(approval ? { teacherApproval: approval } : {}),
         }, { merge: true })
       } else {
         const name = userCredential.user.displayName?.trim() || userCredential.user.email?.split('@')[0] || 'Google user'
@@ -224,6 +239,7 @@ export const useAuthStore = defineStore('auth', () => {
           displayName: name.slice(0, 80),
           email: userCredential.user.email,
           role: selectedRole,
+          teacherApproval: selectedRole === 'teacher' ? 'pending' : 'not-required',
           createdAt: firebaseModules.serverTimestamp(),
           updatedAt: firebaseModules.serverTimestamp(),
           lastLoginAt: firebaseModules.serverTimestamp(),
@@ -237,6 +253,7 @@ export const useAuthStore = defineStore('auth', () => {
         displayName: userProfile.displayName,
         email: userProfile.email,
         role: userProfile.role,
+        teacherApproval: getTeacherApproval(userProfile),
       }
     } catch (error) {
       if (userCredential) {
@@ -275,6 +292,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     authError,
     role,
+    teacherApproval,
     userName,
     initialize,
     register,

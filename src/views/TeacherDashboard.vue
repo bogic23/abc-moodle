@@ -1,9 +1,11 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import { useCourseStore } from '../stores/course'
 
 const route = useRoute()
+const auth = useAuthStore()
 const store = useCourseStore()
 const managedCourses = computed(() => store.courses.filter(course => course.ownerUid === store.currentUserId))
 const activeSectionId = ref(null)
@@ -61,10 +63,15 @@ function selectSection(sectionId) {
         <h1 class="mt-1 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{{ store.course.title || 'Teacher dashboard' }}</h1>
         <p class="mt-1 text-sm text-slate-500">{{ store.course.description || 'Create and manage your courses.' }}</p>
       </div>
-      <RouterLink to="/teacher/course" class="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700">
+      <RouterLink v-if="store.isTeacherApproved" to="/teacher/course" class="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:border-brand-200 hover:bg-brand-50 hover:text-brand-700">
         Manage course & modules
       </RouterLink>
     </div>
+
+    <section v-if="!store.isTeacherApproved" class="mb-8 rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
+      <p class="font-semibold text-amber-900">{{ auth.teacherApproval === 'rejected' ? 'Teacher request not approved' : 'Teacher account pending approval' }}</p>
+      <p class="mt-1 text-sm leading-6 text-amber-800">{{ auth.teacherApproval === 'rejected' ? 'An admin declined your teacher request. Please contact an administrator if you think this is a mistake.' : 'An admin must approve your teacher account before you can create courses or manage course content. You can continue once your approval status is updated.' }}</p>
+    </section>
 
     <section class="mb-8">
       <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -74,7 +81,7 @@ function selectSection(sectionId) {
           <p v-if="store.persistenceStatus === 'saving'" class="mt-1 text-xs text-slate-500">Saving changes to Firestore…</p>
           <p v-else-if="store.persistenceStatus === 'saved'" class="mt-1 text-xs text-emerald-700">Changes saved to Firestore</p>
         </div>
-        <RouterLink v-if="store.persistenceReady" to="/teacher/course/new" class="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-brand-600/20 transition-colors hover:bg-brand-700">
+        <RouterLink v-if="store.persistenceReady && store.isTeacherApproved" to="/teacher/course/new" class="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-brand-600/20 transition-colors hover:bg-brand-700">
           <span class="text-lg leading-none">+</span> Add course
         </RouterLink>
       </div>

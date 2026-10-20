@@ -2,73 +2,215 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /courses/{courseId} {
-      allow read: if request.auth != null;
+    // Assumed data model:
+    // users/{uid}: private profile fields uid, displayName, email, role,
+    // teacherApproval, createdAt, updatedAt, lastLoginAt.
+    // courses/{courseId}: ownerUid, details map, sections/lessons/tests lists,
+    // updatedAt. Course documents contain curriculum, not user PII.
+    // users/{uid}/courseProgress/{courseId}: that user's lesson completion,
+    // assessment attempts, and results.
 
-      allow create: if request.auth != null
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher'
-        && request.resource.data.ownerUid == request.auth.uid;
+    function isAuthenticated() {
+      return request.auth != null;
+    }
 
-      allow update: if request.auth != null
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher'
-        && resource.data.ownerUid == request.auth.uid
-        && request.resource.data.ownerUid == resource.data.ownerUid;
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
 
-      allow delete: if request.auth != null
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher'
-        && resource.data.ownerUid == request.auth.uid;
+    function userProfilePath(userId) {
+      return /databases/$(database)/documents/users/$(userId);
+    }
+
+    function isAdmin() {
+      return isAuthenticated()
+        && exists(userProfilePath(request.auth.uid))
+        && get(userProfilePath(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isApprovedTeacher() {
+      return isAuthenticated()
+        && exists(userProfilePath(request.auth.uid))
+        && get(userProfilePath(request.auth.uid)).data.role == 'teacher'
+        && get(userProfilePath(request.auth.uid)).data.teacherApproval == 'approved';
+    }
+
+    function isValidEmail(email) {
+      return email is string
+        && email.size() >= 3
+        && email.size() <= 254
+        && email.matches('^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$');
+    }
+
+    function isValidUser(data, userId) {
+      return data is map
+        && data.keys().hasAll([
+          'uid', 'displayName', 'email', 'role', 'createdAt', 'updatedAt', 'lastLoginAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'displayName', 'email', 'role', 'teacherApproval',
+          'createdAt', 'updatedAt', 'lastLoginAt'
+        ])
+        && data.uid == userId
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 80
+        && isValidEmail(data.email)
+        && data.role in ['teacher', 'student', 'admin']
+        && (!('teacherApproval' in data)
+          || data.teacherApproval in ['not-required', 'pending', 'approved', 'rejected'])
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.lastLoginAt is timestamp;
+    }
+
+    function isValidNewUser(data, userId) {
+      return isValidUser(data, userId)
+        && 'teacherApproval' in data
+        && data.uid == request.auth.uid
+        && data.email == request.auth.token.email
+        && data.role in ['teacher', 'student']
+        && ((data.role == 'teacher' && data.teacherApproval == 'pending')
+          || (data.role == 'student' && data.teacherApproval == 'not-required'))
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && data.lastLoginAt == request.time;
+    }
+
+    function isValidUserSelfUpdate(data, userId) {
+      let approvalUnchanged = (
+        (!('teacherApproval' in resource.data) && !('teacherApproval' in data))
+        || (('teacherApproval' in resource.data)
+          && ('teacherApproval' in data)
+          && data.teacherApproval == resource.data.teacherApproval)
+        || (resource.data.role == 'teacher'
+          && !('teacherApproval' in resource.data)
+          && data.teacherApproval == 'pending')
+        || (resource.data.role == 'student'
+          && !('teacherApproval' in resource.data)
+          && data.teacherApproval == 'not-required')
+      );
+
+      return isValidUser(data, userId)
+        && data.uid == resource.data.uid
+        && data.email == resource.data.email
+        && data.role == resource.data.role
+        && data.createdAt == resource.data.createdAt
+        && approvalUnchanged
+        && data.updatedAt == request.time
+        && data.diff(resource.data).affectedKeys().hasOnly([
+          'displayName', 'updatedAt', 'lastLoginAt', 'teacherApproval'
+        ]);
+    }
+
+    function isValidAdminApprovalUpdate(data, userId) {
+      return isValidUser(data, userId)
+        && resource.data.role == 'teacher'
+        && data.uid == resource.data.uid
+        && data.email == resource.data.email
+        && data.role == resource.data.role
+        && data.createdAt == resource.data.createdAt
+        && 'teacherApproval' in data
+        && data.teacherApproval in ['pending', 'approved', 'rejected']
+        && data.updatedAt == request.time
+        && data.diff(resource.data).affectedKeys().hasOnly(['teacherApproval', 'updatedAt']);
+    }
+
+    function isValidCourse(data) {
+      return data is map
+        && data.keys().hasAll(['ownerUid', 'details', 'sections', 'lessons', 'tests', 'updatedAt'])
+        && data.keys().hasOnly(['ownerUid', 'details', 'sections', 'lessons', 'tests', 'updatedAt'])
+        && data.ownerUid is string
+        && data.ownerUid.size() >= 1
+        && data.ownerUid.size() <= 128
+        && data.details is map
+        && data.details.keys().hasAll([
+          'title', 'description', 'instructor', 'thumbnail', 'objectives',
+          'prerequisites', 'difficulty', 'completionRule', 'certificateScore'
+        ])
+        && data.details.keys().hasOnly([
+          'title', 'description', 'instructor', 'thumbnail', 'objectives',
+          'prerequisites', 'difficulty', 'completionRule', 'certificateScore'
+        ])
+        && data.details.title is string
+        && data.details.title.size() >= 1
+        && data.details.title.size() <= 160
+        && data.details.description is string
+        && data.details.description.size() <= 4000
+        && data.details.instructor is string
+        && data.details.instructor.size() <= 120
+        && data.details.thumbnail is string
+        && data.details.thumbnail.size() <= 2048
+        && (data.details.thumbnail == ''
+          || data.details.thumbnail.matches('^https?://.+$'))
+        && data.details.objectives is list
+        && data.details.objectives.size() <= 30
+        && data.details.prerequisites is list
+        && data.details.prerequisites.size() <= 30
+        && data.details.difficulty in ['Beginner', 'Intermediate', 'Advanced']
+        && data.details.completionRule in ['all-lessons', 'lessons-and-assessments']
+        && data.details.certificateScore is number
+        && data.details.certificateScore >= 0
+        && data.details.certificateScore <= 100
+        && data.sections is list
+        && data.sections.size() <= 100
+        && data.lessons is list
+        && data.lessons.size() <= 300
+        && data.tests is list
+        && data.tests.size() <= 100
+        && data.updatedAt == request.time;
+    }
+
+    function isValidCourseProgress(data) {
+      return data is map
+        && data.keys().hasAll(['lessons', 'tests'])
+        && data.keys().hasOnly(['lessons', 'tests'])
+        && data.lessons is list
+        && data.lessons.size() <= 300
+        && data.tests is list
+        && data.tests.size() <= 100;
     }
 
     match /users/{userId} {
-      allow create: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.keys().hasAll([
-          'uid',
-          'displayName',
-          'email',
-          'role',
-          'createdAt',
-          'updatedAt',
-          'lastLoginAt'
-        ])
-        && request.resource.data.keys().hasOnly([
-          'uid',
-          'displayName',
-          'email',
-          'role',
-          'createdAt',
-          'updatedAt',
-          'lastLoginAt'
-        ])
-        && request.resource.data.uid == userId
-        && request.resource.data.email == request.auth.token.email
-        && request.resource.data.displayName is string
-        && request.resource.data.displayName.size() > 0
-        && request.resource.data.displayName.size() <= 80
-        && request.resource.data.role in ['teacher', 'student'];
+      allow create: if isOwner(userId)
+        && isValidNewUser(request.resource.data, userId);
 
-      allow read: if request.auth != null && request.auth.uid == userId;
+      // Profile documents contain PII. Only the account owner or an admin may read them.
+      allow get, list: if isOwner(userId) || isAdmin();
 
-      allow update: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.email == resource.data.email
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.keys().hasOnly([
-          'uid',
-          'displayName',
-          'email',
-          'role',
-          'createdAt',
-          'updatedAt',
-          'lastLoginAt'
-        ]);
+      allow update: if (
+          isOwner(userId)
+          && isValidUserSelfUpdate(request.resource.data, userId)
+        ) || (
+          isAdmin()
+          && isValidAdminApprovalUpdate(request.resource.data, userId)
+        );
 
       allow delete: if false;
 
       match /courseProgress/{courseId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && exists(userProfilePath(userId))
+          && isValidCourseProgress(request.resource.data);
+        allow delete: if false;
       }
+    }
+
+    match /courses/{courseId} {
+      allow get, list: if isAuthenticated();
+
+      allow create: if isApprovedTeacher()
+        && request.resource.data.ownerUid == request.auth.uid
+        && isValidCourse(request.resource.data);
+
+      allow update: if isApprovedTeacher()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && isValidCourse(request.resource.data);
+
+      allow delete: if isApprovedTeacher()
+        && resource.data.ownerUid == request.auth.uid;
     }
   }
 }
