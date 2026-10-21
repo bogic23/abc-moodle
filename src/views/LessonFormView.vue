@@ -140,8 +140,8 @@ async function save() {
           <input v-model="form.audioUrl" type="url" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" placeholder="https://example.com/audio.mp3" />
         </div>
         <div class="sm:col-span-2">
-          <label class="mb-1.5 block text-sm font-medium text-slate-700">Video URL</label>
-          <input v-model="form.videoUrl" type="url" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" placeholder="https://example.com/video.mp4" />
+          <label class="mb-1.5 block text-sm font-medium text-slate-700">Video URL (YouTube or direct video)</label>
+          <input v-model="form.videoUrl" type="url" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" placeholder="https://www.youtube.com/watch?v=..." />
         </div>
       </div>
 

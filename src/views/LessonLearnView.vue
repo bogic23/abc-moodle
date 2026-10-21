@@ -9,6 +9,7 @@ const store = useCourseStore()
 const exerciseResponses = ref({})
 
 const lesson = computed(() => store.lessons.find(l => String(l.id) === String(route.params.id)))
+const youtubeEmbedUrl = computed(() => getYoutubeEmbedUrl(lesson.value?.videoUrl))
 const section = computed(() => store.sections.find(item => String(item.id) === String(lesson.value?.sectionId)))
 const orderedLessons = computed(() => store.sections.flatMap(item =>
   item.lessonIds.map(id => store.lessons.find(candidate => String(candidate.id) === String(id))).filter(Boolean),
@@ -16,6 +17,36 @@ const orderedLessons = computed(() => store.sections.flatMap(item =>
 const lessonIndex = computed(() => orderedLessons.value.findIndex(item => String(item.id) === String(lesson.value?.id)))
 const previousLesson = computed(() => orderedLessons.value[lessonIndex.value - 1] || null)
 const nextLesson = computed(() => orderedLessons.value[lessonIndex.value + 1] || null)
+
+function getYoutubeEmbedUrl(videoUrl) {
+  if (!videoUrl) return null
+
+  let url
+  try {
+    url = new URL(videoUrl)
+  } catch {
+    return null
+  }
+
+  const hostname = url.hostname.toLowerCase()
+  const youtubeHosts = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com']
+  let videoId
+
+  if (hostname === 'youtu.be') {
+    videoId = url.pathname.split('/')[1]
+  } else if (youtubeHosts.includes(hostname)) {
+    const pathParts = url.pathname.split('/').filter(Boolean)
+    if (url.pathname === '/watch') {
+      videoId = url.searchParams.get('v')
+    } else if (['embed', 'shorts', 'live', 'v'].includes(pathParts[0])) {
+      videoId = pathParts[1]
+    }
+  }
+
+  return videoId && /^[\w-]{11}$/.test(videoId)
+    ? `https://www.youtube-nocookie.com/embed/${videoId}`
+    : null
+}
 
 onMounted(() => {
   if (!lesson.value) router.push({ name: 'student-dashboard', query: route.query })
@@ -63,7 +94,17 @@ function complete() {
 
       <img v-if="lesson.imageUrl" :src="lesson.imageUrl" :alt="`${lesson.title} illustration`" class="mt-6 max-h-[28rem] w-full rounded-xl border border-slate-200 object-contain" />
       <audio v-if="lesson.audioUrl" controls :src="lesson.audioUrl" class="mt-6 w-full">Your browser does not support audio playback.</audio>
-      <video v-if="lesson.videoUrl" controls :src="lesson.videoUrl" class="mt-6 max-h-[28rem] w-full rounded-xl bg-slate-950">Your browser does not support video playback.</video>
+      <div v-if="youtubeEmbedUrl" class="mt-6 aspect-video w-full overflow-hidden rounded-xl bg-slate-950">
+        <iframe
+          :src="youtubeEmbedUrl"
+          :title="`${lesson.title} video`"
+          class="h-full w-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"
+        ></iframe>
+      </div>
+      <video v-else-if="lesson.videoUrl" controls :src="lesson.videoUrl" class="mt-6 max-h-[28rem] w-full rounded-xl bg-slate-950">Your browser does not support video playback.</video>
 
       <section v-if="lesson.examples" class="mt-8 rounded-xl border border-brand-100 bg-brand-50/60 p-5">
         <h2 class="mb-2 font-semibold text-slate-900">Examples and demonstrations</h2>
