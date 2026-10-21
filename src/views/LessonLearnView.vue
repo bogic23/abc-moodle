@@ -9,6 +9,7 @@ const store = useCourseStore()
 const exerciseResponses = ref({})
 
 const lesson = computed(() => store.lessons.find(l => String(l.id) === String(route.params.id)))
+const googleDriveAudioPreviewUrl = computed(() => getGoogleDrivePreviewUrl(lesson.value?.audioUrl))
 const youtubeEmbedUrl = computed(() => getYoutubeEmbedUrl(lesson.value?.videoUrl))
 const section = computed(() => store.sections.find(item => String(item.id) === String(lesson.value?.sectionId)))
 const orderedLessons = computed(() => store.sections.flatMap(item =>
@@ -17,6 +18,25 @@ const orderedLessons = computed(() => store.sections.flatMap(item =>
 const lessonIndex = computed(() => orderedLessons.value.findIndex(item => String(item.id) === String(lesson.value?.id)))
 const previousLesson = computed(() => orderedLessons.value[lessonIndex.value - 1] || null)
 const nextLesson = computed(() => orderedLessons.value[lessonIndex.value + 1] || null)
+
+function getGoogleDrivePreviewUrl(fileUrl) {
+  if (!fileUrl) return null
+
+  let url
+  try {
+    url = new URL(fileUrl)
+  } catch {
+    return null
+  }
+
+  if (url.hostname.toLowerCase() !== 'drive.google.com') return null
+
+  const pathParts = url.pathname.split('/').filter(Boolean)
+  const fileId = url.searchParams.get('id')
+    || (pathParts[0] === 'file' && pathParts[1] === 'd' ? pathParts[2] : null)
+
+  return fileId ? `https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview` : null
+}
 
 function getYoutubeEmbedUrl(videoUrl) {
   if (!videoUrl) return null
@@ -93,7 +113,16 @@ function complete() {
       </div>
 
       <img v-if="lesson.imageUrl" :src="lesson.imageUrl" :alt="`${lesson.title} illustration`" class="mt-6 max-h-[28rem] w-full rounded-xl border border-slate-200 object-contain" />
-      <audio v-if="lesson.audioUrl" controls :src="lesson.audioUrl" class="mt-6 w-full">Your browser does not support audio playback.</audio>
+      <div v-if="googleDriveAudioPreviewUrl" class="mt-6">
+        <iframe
+          :src="googleDriveAudioPreviewUrl"
+          :title="`${lesson.title} audio`"
+          class="h-24 w-full rounded-xl border border-slate-200"
+          allow="autoplay"
+          referrerpolicy="strict-origin-when-cross-origin"
+        ></iframe>
+      </div>
+      <audio v-else-if="lesson.audioUrl" controls :src="lesson.audioUrl" class="mt-6 w-full">Your browser does not support audio playback.</audio>
       <div v-if="youtubeEmbedUrl" class="mt-6 aspect-video w-full overflow-hidden rounded-xl bg-slate-950">
         <iframe
           :src="youtubeEmbedUrl"
