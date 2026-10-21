@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCourseStore } from '../stores/course'
+import { loadGoogleIdentity, uploadLessonMedia } from '../services/googleDrive'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,8 +25,18 @@ const form = ref({
 const objectivesText = ref('')
 const exercisesText = ref('')
 const formError = ref('')
+const uploadError = ref('')
+const uploadProgress = ref(0)
+const selectedFiles = ref({ image: null, audio: null, video: null })
+const uploadingField = ref('')
+const googleIdentityReady = ref(false)
+const fileInputs = {
+  image: ref(null),
+  audio: ref(null),
+  video: ref(null),
+}
 
-onMounted(() => {
+onMounted(async () => {
   if (isEdit.value) {
     const lesson = store.lessons.find(l => String(l.id) === String(route.params.id))
     if (lesson) {
@@ -36,11 +47,55 @@ onMounted(() => {
   } else if (route.query.section && store.sections.some(section => String(section.id) === String(route.query.section))) {
     form.value.sectionId = String(route.query.section)
   }
+
+  try {
+    await loadGoogleIdentity()
+    googleIdentityReady.value = true
+  } catch (error) {
+    uploadError.value = error.message || 'Google authentication could not be loaded.'
+  }
 })
+
+function selectMediaFile(field, event) {
+  const file = event.target.files?.[0] || null
+  selectedFiles.value[field] = file
+  uploadError.value = ''
+  uploadProgress.value = 0
+
+  if (file && !file.type.startsWith(`${field}/`)) {
+    selectedFiles.value[field] = null
+    event.target.value = ''
+    uploadError.value = `Choose a valid ${field} file.`
+  }
+}
+
+async function uploadSelectedMedia(field) {
+  const file = selectedFiles.value[field]
+  if (!file || uploadingField.value) return
+
+  uploadError.value = ''
+  uploadProgress.value = 0
+  uploadingField.value = field
+  try {
+    form.value[`${field}Url`] = await uploadLessonMedia(file, progress => {
+      uploadProgress.value = progress
+    })
+    selectedFiles.value[field] = null
+    fileInputs[field].value.value = ''
+  } catch (error) {
+    uploadError.value = error.message || 'The file could not be uploaded to Google Drive.'
+  } finally {
+    uploadingField.value = ''
+  }
+}
 
 async function save() {
   if (!form.value.title.trim()) {
     formError.value = 'Enter a lesson title.'
+    return
+  }
+  if (uploadingField.value) {
+    formError.value = 'Wait for the media upload to finish before saving the lesson.'
     return
   }
   formError.value = ''
@@ -71,6 +126,7 @@ async function save() {
 
     <form @submit.prevent="save" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <p v-if="formError" role="alert" class="text-sm text-red-700">{{ formError }}</p>
+      <p v-if="uploadError" role="alert" class="text-sm text-red-700">{{ uploadError }}</p>
       <div>
         <label class="mb-1.5 block text-sm font-medium text-slate-700" for="lesson-section">Section / module</label>
         <select
@@ -134,16 +190,37 @@ async function save() {
         <div>
           <label class="mb-1.5 block text-sm font-medium text-slate-700">Image or diagram URL</label>
           <input v-model="form.imageUrl" type="url" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" placeholder="https://example.com/diagram.png" />
+          <label for="lesson-image-file" class="mt-3 block text-xs font-medium text-slate-600">Or upload an image</label>
+          <input id="lesson-image-file" :ref="fileInputs.image" type="file" accept="image/*" class="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200" @change="selectMediaFile('image', $event)" />
+          <button type="button" :disabled="!selectedFiles.image || !googleIdentityReady || !!uploadingField" class="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50" @click="uploadSelectedMedia('image')">
+            {{ uploadingField === 'image' ? `Uploading ${uploadProgress}%` : 'Upload image to Google Drive' }}
+          </button>
         </div>
         <div>
           <label class="mb-1.5 block text-sm font-medium text-slate-700">Audio URL</label>
           <input v-model="form.audioUrl" type="url" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" placeholder="https://example.com/audio.mp3" />
+          <label for="lesson-audio-file" class="mt-3 block text-xs font-medium text-slate-600">Or upload an audio file</label>
+          <input id="lesson-audio-file" :ref="fileInputs.audio" type="file" accept="audio/*" class="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200" @change="selectMediaFile('audio', $event)" />
+          <button type="button" :disabled="!selectedFiles.audio || !googleIdentityReady || !!uploadingField" class="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50" @click="uploadSelectedMedia('audio')">
+            {{ uploadingField === 'audio' ? `Uploading ${uploadProgress}%` : 'Upload audio to Google Drive' }}
+          </button>
         </div>
         <div class="sm:col-span-2">
           <label class="mb-1.5 block text-sm font-medium text-slate-700">Video URL (YouTube or direct video)</label>
           <input v-model="form.videoUrl" type="url" class="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20" placeholder="https://www.youtube.com/watch?v=..." />
+          <label for="lesson-video-file" class="mt-3 block text-xs font-medium text-slate-600">Or upload a video file</label>
+          <input id="lesson-video-file" :ref="fileInputs.video" type="file" accept="video/*" class="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200" @change="selectMediaFile('video', $event)" />
+          <button type="button" :disabled="!selectedFiles.video || !googleIdentityReady || !!uploadingField" class="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50" @click="uploadSelectedMedia('video')">
+            {{ uploadingField === 'video' ? `Uploading ${uploadProgress}%` : 'Upload video to Google Drive' }}
+          </button>
         </div>
       </div>
+      <p v-if="uploadingField" role="status" aria-live="polite" class="text-sm text-slate-600">
+        Uploading {{ selectedFiles[uploadingField]?.name || 'file' }} to Google Drive: {{ uploadProgress }}%
+      </p>
+      <p class="text-xs text-slate-500">
+        Files uploaded to Drive are shared with anyone who has the link. Uploaded URLs are saved to Firestore when you save this lesson.
+      </p>
 
       <div>
         <label class="mb-1.5 block text-sm font-medium text-slate-700">Duration</label>
@@ -158,8 +235,8 @@ async function save() {
       <div class="flex gap-3 pt-2">
         <button
           type="submit"
-          :disabled="!store.sections.length"
-          class="rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-medium text-white shadow-sm shadow-brand-500/25 transition-colors hover:bg-brand-700"
+          :disabled="!store.sections.length || !!uploadingField"
+          class="rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-medium text-white shadow-sm shadow-brand-500/25 transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {{ isEdit ? 'Update Lesson' : 'Create Lesson' }}
         </button>
